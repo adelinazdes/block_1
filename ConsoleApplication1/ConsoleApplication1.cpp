@@ -1,75 +1,102 @@
-﻿// ConsoleApplication1.cpp : This file contains the 'main' function. Program execution begins and ends there.
-//
-
-#include <iostream>
-#include <iostream>
-#include <fstream>
-#include <string.h>
+﻿#include <string.h>
 #include <stdio.h>
+#include <clocale>
+#include <iomanip>
+#include <iostream>
 #include <vector>
+#include <fstream>
+#include <time.h>
+#include <algorithm>
+#include <fixed/fixed.h>
+#include <pde_solvers/pde_solvers.h>
 
 using namespace std;
+
+struct znachenia
+{
+    vector<double> massiv;
+    double nachalo;
+};
+
+struct pipe
+{
+    double L, dx, dt, V, N;
+};
+
+int grid_size = 101;//размер сетки
+int T = 3000; //Заданный период времени 
+
+
+
+void rashet(pipe myPipe, double parametr, vector<double>& current_layer, vector<double>& previous_layer) {
+
+    // Суть - смещение предыдущего слоя и запись граничного условия
+    for (size_t i = 1; i < current_layer.size(); i++)
+    {
+        current_layer[i] = previous_layer[i - 1];
+    }
+    current_layer[0] = parametr;
+
+}
+
+
+
+void excel(pipe myPipe, ring_buffer_t<vector<vector<double>>>& buffer, int i) {
+    vector<vector<double>>& current_layer = buffer.current();
+    if (i == 0) {
+        ofstream outFile("plotnostsera.csv");
+        outFile << "время,координиата,плотность, сера" << "\n";
+        // Записать значения текущего слоя в файл
+        for (size_t j = 0; j < current_layer[0].size(); j++) {
+            outFile << i * myPipe.dt << "," << j * myPipe.dx << "," << current_layer[0][j] << "," << current_layer[1][j] << "\n";
+        }
+        outFile.close();
+    }
+    else {
+        ofstream outFile("plotnostsera.csv", ios::app);
+        // Записать значения текущего слоя в файл
+        for (size_t j = 0; j < current_layer[0].size(); j++) {
+            outFile << i * myPipe.dt << "," << j * myPipe.dx << "," << current_layer[0][j] << "," << current_layer[1][j] << "\n";
+        }
+        outFile.close();
+    }
+}
+
+
+
+
 int main()
 {
-    struct pipe
-    {
-        double L, dx, dt, V;
-    };
-
     pipe myPipe;
     myPipe.L = 100000;
-    myPipe.V = 1.5;
-    int n = 101;
-    int T = 7000;    //Заданный период времени 
-    double ro_n = 850;
-    double ro_k = 860;
-    myPipe.dx = myPipe.L / (n - 1);
-    myPipe.dt = myPipe.dx / myPipe.V;    //условие Куранта
-    int N = (T / myPipe.dt);
+    myPipe.V = 1;
 
-    vector<double> ro_0(N);
-    ro_0 = { 850, 870, 860, 860, 860,860, 860, 860, 860, 860 };
-    ofstream outFile1("massiv2.csv");
-    outFile1 << "время,координата,плотность" << "\n";
-    vector<double> ro_1(n);
-    for (int k = 0; k < n; k++) {
-        ro_1[k] = ro_n;
+
+    myPipe.dx = myPipe.L / (grid_size - 1);
+    myPipe.dt = myPipe.dx / myPipe.V; //условие Куранта
+    myPipe.N = (T / myPipe.dt);
+
+    znachenia ro;
+    ro.massiv = vector<double>(myPipe.N);
+    ro.massiv = { 850,860,890 }; //значения плотности на входе трубы
+    ro.nachalo = 950;
+
+    znachenia sera;
+    sera.massiv = vector<double>(myPipe.N);
+    sera.massiv = { 0.01, 0.02, 0.03 }; //значения серы на входе трубы
+
+
+    vector<double> odin(grid_size);
+    ring_buffer_t<vector<vector<double>>> buffer(2, { odin, odin });
+
+
+    for (size_t i = 0; i < myPipe.N; i++) {
+        rashet(myPipe, ro.massiv[i], buffer.current()[0], buffer.previous()[0]);
+        rashet(myPipe, sera.massiv[i], buffer.current()[1], buffer.previous()[1]);
+
+        excel(myPipe, buffer, i);
+        buffer.advance(1);
     }
-    vector<double> ro_2(n);
-    for (int i = 0; i < N; i++) {
-        ro_2[0] = ro_0[i];
-        for (int i = 1; i < n; i++) {
-            ro_2[i] = ro_1[i - 1];
-        }
-        ro_1 = ro_2;
-        for (int j = 0; j < n; j++) {
-            outFile1 << i * myPipe.dt << "," << j * myPipe.dx << "," << ro_2[j] << "\n";
-        }
 
-    }
 
-    outFile1.close();
-
-    //апвапимвпаив
-
-    vector<float> sera_0(N);//сера по партиям 
-    sera_0 = { 0.01, 0.02, 0.03, 0.04, 0.05,0.06, 0.07, 0.08, 0.09, 0.01 };
-    ofstream outFile2("sera2.csv");
-    outFile2 << "время,координата,сера" << "\n";
-    vector<float> sera_1(n);
-    for (int k = 0; k < n; k++) {
-        sera_1[k] = 0.01;
-    }
-    vector<float> sera_2(n);
-    for (int i = 0; i < N; i++) {
-        sera_2[0] = sera_0[i];
-        for (int i = 1; i < n; i++) {
-            sera_2[i] = sera_1[i - 1];
-        }
-        sera_1 = sera_2;
-        for (int j = 0; j < n; j++) {
-            outFile2 << myPipe.dt * i << "," << myPipe.dx * j << "," << sera_2[j] << "\n";
-        }
-    }
-    outFile2.close();
 }
